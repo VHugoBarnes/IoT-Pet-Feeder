@@ -1,27 +1,33 @@
+#include <Arduino.h>
+
 #include <WiFiEsp.h>
 #include <WiFiEspClient.h>
 #include <PubSubClient.h>
 #include "SoftwareSerial.h"
 #include <Servo.h>
 
+/************************** Configurando pines para el Arduino MEGA ***************************/
+
 /************************************** Servomotor **************************************/
 Servo motor;  // Creamos un objeto de tipo Servo
-int pinMotor = 4;
+int pinMotor = 6;
 int motorNoventa = 90; 
 int motorCientoOchenta = 180; 
 int tiempoEspera = 10000;
+/************************************** Servomotor **************************************/
 
 /************************************** PIR **************************************/
-int inputPin = 2;               // Escoger el pin de entrada (Para el sensor PIR)
+int inputPin = 4;               // Escoger el pin de entrada (Para el sensor PIR)
 int pirState = LOW;             // Iniciamos asumiendo que ningún movimiento es detectado
 int val = 0;                    // Variable para leer el estatus del pin
+/************************************** PIR **************************************/
 
 //Conexión a la red wifi: nombre de la red y contraseña
-#define WIFI_AP "INFINITUM4B85"
-#define WIFI_PASSWORD "VcOqQ2UF5Y"
+#define WIFI_AP ""
+#define WIFI_PASSWORD ""
 
 //Nombre o IP del servidor mosquitto
-char server[50] = "192.168.1.69";
+char server[50] = "192.168.0.8";
 
 //Inicializamos el objeto de cliente esp
 WiFiEspClient espClient;
@@ -32,7 +38,7 @@ PubSubClient client(espClient);
 
 //Conexión serial para el esp con una comunicación
 //serial, pines 2: rx y 3: tx
-SoftwareSerial soft(11, 12);
+SoftwareSerial soft(2, 3);
 
 //Contador para el envio de datos
 unsigned long lastSend;
@@ -43,7 +49,6 @@ void setup() {
     //Inicializamos la comunicación serial para el log
     Serial.begin(9600);
     //Iniciamos la conexión a la red WiFi
-    Serial.println("================Intentando conexión================");
     InitWiFi();
     //Colocamos la referencia del servidor y el puerto
     client.setServer( server, 1883 );
@@ -54,7 +59,7 @@ void setup() {
     /******************************** PIR *************************************/
     /******************************** SERVO ************************************/
     motor.attach(pinMotor);     // El pin al que estará conectado
-    //motor.write(motorNoventa); // Pone el servomotor en los grados que le especificamos
+    motor.write(motorNoventa); // Pone el servomotor en los grados que le especificamos
     pinMode(pinMotor, OUTPUT); // Establecemos que el pin será de salida
     /******************************** SERVO ************************************/
 }
@@ -70,9 +75,7 @@ void loop() {
     //Validamos si esta la conexión del servidor
     if(!client.connected() ) {
         //Si falla reintentamos la conexión
-        Serial.println("================Intentando conexión================");
         reconnectClient();
-        Serial.println("================Intentando conexión================");
     }
 
     //Creamos un contador para enviar la data cada 2 segundos
@@ -93,32 +96,26 @@ void sendDataTopic()
 
     val = digitalRead(inputPin);  // Leer el valor de entrada
     if (val == HIGH) {
-        motor.write(motorCientoOchenta);
-        Serial.println("MOVIMIENTO");
-        pirState = HIGH;
-        payload = "1";
-    
-        // Send payload
-        char attributes[100];
-        payload.toCharArray( attributes, 100 );
-        client.publish( "casa/comedor", attributes );
-        Serial.println( attributes );
-        
-        delay(3000);
-        motor.write(motorNoventa);
+        if (pirState == LOW) {
+            motor.write(motorCientoOchenta);
+            delay(3000);
+            motor.write(motorNoventa);
+            pirState = HIGH;
+            payload = "1";
+        }
     } else {
-        // Se acaba de ir el movimiento
-        payload = "0";
-        pirState = LOW;
-        Serial.println("SIN MOVIMIENTO");
-    
-        // Send payload
-        char attributes[100];
-        payload.toCharArray( attributes, 100 );
-        client.publish( "casa/comedor", attributes );
-        Serial.println( attributes );
+        if (pirState == HIGH){
+            // Se acaba de ir el movimiento
+            payload = "0";
+            pirState = LOW;
+        }
     }
 
+    // Send payload
+    char attributes[100];
+    payload.toCharArray( attributes, 100 );
+    client.publish( "casa/comedor", attributes );
+    Serial.println( attributes );
 }
 
 //Inicializamos la conexión a la red wifi
